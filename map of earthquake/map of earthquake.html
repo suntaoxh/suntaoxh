@@ -1,0 +1,672 @@
+<!DOCTYPE html> 
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>
+      地震数据统计地图及其热力图
+    </title>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.23/esri/themes/light/main.css"
+    />
+	<script src="javascript/jquery.js"></script>
+    <script src="https://js.arcgis.com/4.23/"></script>
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+
+      #viewDiv {
+        height: 80%;
+        width: 100%;
+      }
+	  #histogram {
+         width: 500px;
+        height: 150px;
+      }
+	  #histogram1 {
+         padding: 10px;
+        text-align: center;
+        box-shadow: 0;
+      }
+	   .labels {
+        padding: 5px;
+      }
+      .container {
+        height: 20%;
+        width: 100%;
+      }
+    </style>
+
+
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+	<div id="layerMangerTool"  title="地图切换">
+		<h2>底图切换</h2>
+		<hr>
+		<select id="bm">
+		</select>
+		</hr>
+	</div>
+    <div
+      id="select-by-rectangle"
+      class="esri-widget esri-widget--button esri-widget esri-interactive"
+      title="用矩形框选取要素"
+    >
+      <span class="esri-icon-checkbox-unchecked"></span>
+    </div>
+    <div
+      id="clear-selection"
+      class="esri-widget esri-widget--button esri-widget esri-interactive"
+      title="清除选取要素"
+    >
+      <span class="esri-icon-erase"></span>
+    </div>
+	<div
+      id="add"
+      class="esri-widget esri-widget--button esri-widget esri-interactive"
+      title="添加热力图"
+    >
+      <span class="esri-icon-plus-circled"></span>
+    </div>
+	<div
+      id="addfeature"
+      class="esri-widget esri-widget--button esri-widget esri-interactive"
+      title="添加40年地震地图"
+    >
+      <span class="esri-icon-add-attachment"></span>
+    </div>
+	<div
+      id="text"
+	  style="background-color: floralwhite;"
+      title="Text" 
+    >
+     <p>  地震是世界上最为频繁的地质灾害。据统计，地球上每年约发生500多万次地震，即每天要发生上万次的地震。其中绝大多数太小或太远，以至于人们感觉不到；真正能对人类造成严重危害的地震大约有十几二十次；能造成特别严重灾害的地震大约有一两次。我印象中最大的地震就是我国的汶川大地震，这个大地震也给我国造成了严重的人员伤亡和经济损失。那时的景象我仍记忆尤新，所以我做的这个地图对全球的40年间的地震以及最近七天内（实时更新）的进行了统计。</p>
+	<p>  因为人们感觉不到的地震，必须用地震仪才能记录下来；不同类型的地震仪能记录不同强度、不同远近的地震。世界上运转着数以千计的各种地震仪器日夜监测着地震的动向。而地图更是最能直观反映出地震数据的形式，将记录到的数据用地图的形式展示出来，让人们了解过去以及现在的地震且认识到哪些地方是地震的高发区。从而提高人们对地震的防范意识，和呼吁更多的人对地震严重的地区进行救助。</p>
+	  <p>附上一张地震灾害后的灾区图<img src="img/bba1cd11728b4710b912183c1d80d4fdfc03934585a6.jpg" alt="some_text" width="304" height="228"></p>
+    </div>
+    <div class="container">
+      <div id="tableDiv"></div>
+    </div>
+	<div id="histogram1" style="background-color: white">
+	<h3 align="center">40年间地震等级的统计直方图</h3>
+	<div id="histogram" class="esri-widget"></div>
+        <div class="labels esri-widget">
+          <span style="float: left;">1.6级</span>
+		  <span style="float: center;">5.3级</span>
+          <span style="float: right;">9级</span>
+        </div>
+	</div>
+	<script>
+      baseMap = ["osm", "satellite", "oceans", "national-geographic", "hybrid", "gray", "dark-gray"];
+
+      //初始化图层管理控件
+      function init() {
+          let bm = $('#bm');
+          //底图下拉列表
+          for (let i = 0; i < baseMap.length; i++) {
+              let option = $('<option value=' + baseMap[i] + '>' + baseMap[i] + '</option>');
+              bm.append(option);
+          }
+      }
+
+      init();
+      require([
+		"esri/config",
+        "esri/Map",
+        "esri/views/MapView",
+        "esri/layers/CSVLayer",
+        "esri/layers/FeatureLayer",
+        "esri/layers/GraphicsLayer",
+        "esri/widgets/Sketch/SketchViewModel",
+        "esri/Graphic",
+        "esri/widgets/FeatureTable",
+        "esri/Basemap",
+        "esri/geometry/geometryEngineAsync",
+		"esri/widgets/Legend",
+		"esri/widgets/Expand",
+		"esri/widgets/Histogram",
+		"esri/smartMapping/statistics/histogram",
+		"esri/Color",
+		"esri/widgets/LayerList"
+      ], function (
+		esriConfig,
+        Map,
+        MapView,
+        CSVLayer,
+        FeatureLayer,
+        GraphicsLayer,
+        SketchViewModel,
+        Graphic,
+        FeatureTable,
+        Basemap,
+        geometryEngineAsync,
+		Legend,
+		Expand,
+		Histogram,
+		histogram,
+		Color,
+		LayerList
+      ) {
+		 
+		esriConfig.apiKey = "AAPK56e3ac027f044c4089d8ceec232fc05dYaOuzVRzm8tMRqvzOvDvIEevbqJ85yppn9PacU6cy4duurJrVK9wo_8BcWO8i8bi"; 
+		//创建feature图层
+        const states = new FeatureLayer({
+          url: "https://sampleserver6.arcgisonline.com/arcgis/rest/services/Earthquakes_Since1970/FeatureServer",
+		  title: "从1970年到2009年发生地震的地震地点",
+		  popupTemplate: {
+            title: "{name}",
+            content: "在{date_}，等级为 {magnitude}的 {name}，造成了{num_deaths}人数的死亡和失踪."
+          },
+          /*spatialReference: {
+            wkid: 102003
+          },*/
+        });
+
+
+        // 创建csvLayer图层
+        const csvLayer = new CSVLayer({
+		url:"https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.csv",
+          delimiter: ",",
+		  title: "前一周地震等级处于2.5级以上的地震点",
+          popupTemplate: {
+            title: "{place}",
+            content: "在{time}，等级为{mag} {type}发生在 {place} ."
+          },
+          renderer: setRenderer()
+        });
+
+        let csvLayerView;
+        csvLayer
+          .when(() => {
+            view.whenLayerView(csvLayer).then(function (layerView) {
+              csvLayerView = layerView;
+			  alert("作为世界上最常见的灾害，地震是人类一直想要预测其发生地点和时间的。从古代的地动仪到现在的各种地震仪，它们观测并且记录了许多大大小小的地震。\r而我收集了这些数据并将它们展现在地图中，希望人们能知道地震的多发区和提高自己的地震防范意识。");
+            });
+          })
+          .catch(errorCallback);
+       	const map = new Map({
+                  basemap: "osm" ,// 底图
+				  layers:[csvLayer]
+          });
+
+        const view = new MapView({
+            map: map,
+            center: [114, 30], // 坐标
+            zoom: 5, // 缩放等级
+            container: "viewDiv",
+            /*extent: {
+            type: "extent",
+            spatialReference: {
+              wkid: 102003
+            },
+            xmax: 2275062,
+            xmin: -2752064,
+            ymax: 1676207,
+            ymin: -1348080
+          },*/
+        });
+        document.getElementById('bm').addEventListener('change', function () {
+            map.basemap = $('#bm').val()
+        })
+		 //添加地图切换
+		 view.ui.add(
+            
+              new Expand({
+                view: view,
+				expandIconClass: "esri-icon-basemap", 
+                content: document.getElementById("layerMangerTool"),
+                group: "top-left",
+                expanded: true
+              }),
+             "top-right"
+          );
+		  //添加图层管理
+		  view.ui.add(
+			  new Expand({
+			expandIconClass: "esri-icon-layers", 
+			view: view,
+			content: new LayerList({
+			//container: document.createElement("div"),
+			view: view
+		  })
+			  }),
+				"top-right"
+		  );
+		  //添加地震故事文本
+		   view.ui.add(
+            
+              new Expand({
+                view: view,
+				expandIconClass: "esri-icon-documentation",
+                content: document.getElementById("text"),
+                group: "top-left",
+                expanded: false
+              }),
+             "top-right"
+          );
+		//view.ui.add(document.getElementById("layerMangerTool"), "top-right");
+		//设置颜色
+		const red = new Color("rgba(225, 0, 0, 0.8)");
+		//创建直方图
+		view.when().then(createHistogram);
+		async function createHistogram() {
+		  const params = {
+            layer: states,
+            field: "magnitude",
+            numBins: 50,
+			view:view,
+			useFeaturesInView:true,
+			minValue: 1.6,
+            maxValue: 9
+          };
+		 
+         histogram(params)
+          .then(function(histogramResult) {
+             const histogramWidget = Histogram.fromHistogramResult(histogramResult);
+			 histogramWidget.barCreatedFunction = (index, element) => {
+                  element.setAttribute("fill", red.toHex());
+                  element.setAttribute("opacity", 0.8);
+			 }
+             histogramWidget.container = "histogram";
+             histogramWidget.min = histogramResult.minValue;
+             histogramWidget.max = histogramResult.maxValue;
+             histogramWidget.bins = histogramResult.bins;
+			 histogramWidget.average = histogramResult.avg;
+          })
+           .catch(function(error) {
+             console.log("there was an error: ", error);
+           });
+		}
+		//添加直方图
+		 view.ui.add(
+                 new Expand({
+                view: view,
+				expandIconClass: "esri-icon-media",	
+                content: document.getElementById("histogram1"),
+				expandTooltip: "40年间地震统计直方图",
+                expanded: false
+              }),
+             "bottom-right"
+          );
+        // 创建功能表的新实例
+        const featureTable = new FeatureTable({
+          view: view,
+          layer: csvLayer,
+          highlightOnRowSelectEnabled: false,
+          fieldConfigs: [
+            {
+              name: "place",
+              label: "地点"
+            },
+            {
+              name: "mag",
+              label: "地震等级"
+            },
+            {
+              name: "type",
+              label: "地震类型"
+            },
+            {
+              name: "time",
+              label: "时间"
+            },
+            {
+              name: "status",
+              label: "状态"
+            },
+          ],
+          container: document.getElementById("tableDiv")
+        });
+
+        
+        // 创建一个要素列表
+        let features = [];
+
+        // 监听要素的选择
+        featureTable.on("selection-change", (changes) => {
+     
+          // 如果未选择该特征，则从功能数组中删除已删除特征的对象 Id
+          changes.removed.forEach((item) => {
+            const data = features.find((data) => {
+              return data === item.objectId;
+            });
+            if (data) {
+              features.splice(features.indexOf(data), 1);
+            }
+          });
+
+          //如果选择该特征，则从功能数组中增加特征的对象 Id
+          changes.added.forEach((item) => {
+            features.push(item.objectId);
+          });
+
+          // 对表中未选取的特征设置排除的效果
+          csvLayerView.featureEffect = {
+            filter: {
+              objectIds: features
+            },
+            excludedEffect: "blur(5px) grayscale(90%) opacity(40%)"
+          };
+        });
+
+        // 多边形图形图层将由 sketchview 模型使用显示在视图上绘制的多边形
+        const polygonGraphicsLayer = new GraphicsLayer({
+			listMode:"hide"
+		});
+        map.add(polygonGraphicsLayer);
+
+        // 添加按矩形选择的视图按钮
+        view.ui.add("select-by-rectangle", "top-left");
+        const selectButton = document.getElementById("select-by-rectangle");
+
+        // 单击“按矩形选择”按钮的事件
+        selectButton.addEventListener("click", () => {
+          view.popup.close();
+          sketchViewModel.create("rectangle");
+        });
+
+        //在视图中添加清除选择按钮
+        view.ui.add("clear-selection", "top-left");
+        document
+          .getElementById("clear-selection")
+          .addEventListener("click", () => {
+            featureTable.clearSelection();
+            featureTable.filterGeometry = null;
+            polygonGraphicsLayer.removeAll();
+          });
+
+        //创建新的草图视图模型设置其图层
+        const sketchViewModel = new SketchViewModel({
+          view: view,
+          layer: polygonGraphicsLayer
+        });
+
+        // 用户在地图上绘制完矩形后，使用矩形选择地图和表格上的要素
+        sketchViewModel.on("create", async (event) => {
+          if (event.state === "complete") {
+            //此面将用于查询与其相交的要素
+            const geometries = polygonGraphicsLayer.graphics.map(function (
+              graphic
+            ) {
+              return graphic.geometry;
+            });
+            const queryGeometry = await geometryEngineAsync.union(
+              geometries.toArray()
+            );
+            selectFeatures(queryGeometry);
+          }
+        });
+
+        // 当用户在地图上完成绘制矩形时，将调用此函数。使用矩形选择图层和表中的要素
+        function selectFeatures(geometry) {
+          if (csvLayerView) {
+            // 创建查询并将其几何参数设置为在视图上绘制的矩形
+            const query = {
+              geometry: geometry,
+              outFields: ["*"]
+            };
+
+            // 从 csv 图层视图中查询图形。为查询设置的几何可以是点要素的面，并且仅返回相交几何
+            csvLayerView
+              .queryFeatures(query)
+              .then((results) => {
+                if (results.features.length === 0) {
+                  clearSelection();
+                } else {
+                  // 通过调用表的 selectRows 方法将查询结果传递到表中。这将触发 FeatureTable 的选择-更改事件，我们将在 csv 图层视图上设置要素效果
+                  featureTable.filterGeometry = geometry;
+                  featureTable.selectRows(results.features);
+                }
+              })
+              .catch(errorCallback);
+          }
+        }
+
+        function errorCallback(error) {
+          console.log("error happened:", error.message);
+        }
+
+        // 这是从 CSVLayer 构造函数 调用的 菱形 CIM 符号
+        function setRenderer() {
+          return {
+            type: "simple",
+            symbol: {
+              type: "cim",
+              data: {
+                type: "CIMSymbolReference",
+                symbol: {
+                  type: "CIMPointSymbol",
+                  symbolLayers: [
+                    {
+                      type: "CIMVectorMarker",
+                      enable: true,
+                      anchorPointUnits: "Relative",
+                      dominantSizeAxis3D: "Y",
+                      size: 15.75,
+                      billboardMode3D: "FaceNearPlane",
+                      frame: {
+                        xmin: 0,
+                        ymin: 0,
+                        xmax: 21,
+                        ymax: 21
+                      },
+                      markerGraphics: [
+                        {
+                          type: "CIMMarkerGraphic",
+                          geometry: {
+                            rings: [
+                              [
+                                [10.5, 23],
+                                [17, 9],
+                                [10.5, -5],
+                                [4, 9],
+                      			[10.5, 23]
+                              ]
+                            ]
+                          },
+                          symbol: {
+                            type: "CIMPolygonSymbol",
+                            symbolLayers: [
+                              {
+                                type: "CIMSolidStroke",
+                                enable: true,
+                                capStyle: "Round",
+                                joinStyle: "Round",
+                                lineStyle3D: "Strip",
+                                miterLimit: 10,
+                                width: 1,
+                                color: [0, 0, 0, 255]
+                              },
+                              {
+                                type: "CIMSolidFill",
+                                enable: true,
+                                color: [255, 255, 0, 255]
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      scaleSymbolsProportionally: true,
+                      respectFrame: true
+                    },
+                    {
+                      type: "CIMVectorMarker",
+                      enable: true,
+                      colorLocked: true,
+                      anchorPointUnits: "Relative",
+                      dominantSizeAxis3D: "Y",
+                      size: 8,
+                      billboardMode3D: "FaceNearPlane",
+                      frame: {
+                        xmin: -5,
+                        ymin: -5,
+                        xmax: 5,
+                        ymax: 5
+                      },
+                      markerGraphics: [
+                        {
+                          type: "CIMMarkerGraphic",
+                          geometry: {
+                            rings: [
+                              [
+                                [0, 5],
+                                [0.87, 4.92],
+                                [1.71, 4.7],
+                                [2.5, 4.33],
+                                [3.21, 3.83],
+                                [3.83, 3.21],
+                                [4.33, 2.5],
+                                [4.7, 1.71],
+                                [4.92, 0.87],
+                                [5, 0],
+                                [4.92, -0.87],
+                                [4.7, -1.71],
+                                [4.33, -2.5],
+                                [3.83, -3.21],
+                                [3.21, -3.83],
+                                [2.5, -4.33],
+                                [1.71, -4.7],
+                                [0.87, -4.92],
+                                [0, -5],
+                                [-0.87, -4.92],
+                                [-1.71, -4.7],
+                                [-2.5, -4.33],
+                                [-3.21, -3.83],
+                                [-3.83, -3.21],
+                                [-4.33, -2.5],
+                                [-4.7, -1.71],
+                                [-4.92, -0.87],
+                                [-5, 0],
+                                [-4.92, 0.87],
+                                [-4.7, 1.71],
+                                [-4.33, 2.5],
+                                [-3.83, 3.21],
+                                [-3.21, 3.83],
+                                [-2.5, 4.33],
+                                [-1.71, 4.7],
+                                [-0.87, 4.92],
+                                [0, 5]
+                              ]
+                            ]
+                          },
+                          symbol: {
+                            type: "CIMPolygonSymbol",
+                            symbolLayers: [
+                              {
+                                type: "CIMSolidStroke",
+                                enable: true,
+                                capStyle: "Round",
+                                joinStyle: "Round",
+                                lineStyle3D: "Strip",
+                                miterLimit: 10,
+                                width: 0.5,
+                                color: [167, 169, 172, 255]
+                              },
+                              {
+                                type: "CIMSolidFill",
+                                enable: true,
+                                color: [255, 255, 255, 255]
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      scaleSymbolsProportionally: true,
+                      respectFrame: true
+                    }
+                  ],
+                  haloSize: 1,
+                  scaleX: 1,
+                  angleAlignment: "Display"
+                }
+              }
+            }
+          };
+        }
+		//定义热力图的渲染
+		const renderer1 = {
+          type: "heatmap",
+          colorStops: [
+            { color: "rgba(63, 40, 102, 0)", ratio: 0 },
+            { color: "#472b77", ratio: 0.083 },
+            { color: "#4e2d87", ratio: 0.166 },
+            { color: "#563098", ratio: 0.249 },
+            { color: "#5d32a8", ratio: 0.332 },
+            { color: "#6735be", ratio: 0.415 },
+            { color: "#7139d4", ratio: 0.498 },
+            { color: "#7b3ce9", ratio: 0.581 },
+            { color: "#853fff", ratio: 0.664 },
+            { color: "#a46fbf", ratio: 0.747 },
+            { color: "#c29f80", ratio: 0.83 },
+            { color: "#e0cf40", ratio: 0.913 },
+            { color: "#ffff00", ratio: 1 }
+          ],
+          maxPixelIntensity: 25,
+          minPixelIntensity: 0
+        };
+		 //新建一个CSVLayer图层
+        const layer1 = new CSVLayer({
+          url: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.csv",
+          title: "前一周地震等级处于2.5级以上的地震点的地震热力图",
+          copyright: "USGS Earthquakes",
+          renderer: renderer1
+        });
+		let click1 = true;
+		//加入隐藏图例
+		 view.ui.add(
+            
+              new Expand({
+                view: view,
+                content: new Legend({ view: view }),
+                group: "top-left",
+                expanded: true
+              }),
+            "bottom-left"
+          );
+		//添加点击加入热力图的按钮
+		view.ui.add("add", "top-left");
+        document
+          .getElementById("add")
+          .addEventListener("click", () => {
+           if(click1 == true){
+			   map.add(layer1)
+			   click1 = false
+		   }else{
+			   map.remove(layer1)
+			   click1 = true
+			   
+		   }
+			   
+          });
+		let click2 = true;
+		 //添加点击加入1970年地震图层的按钮
+		view.ui.add("addfeature", "top-left");
+        document
+          .getElementById("addfeature")
+          .addEventListener("click", () => {
+           if(click2 == true){
+			   map.add(states)
+			   click2 = false
+		   }else{
+			   map.remove(states)
+			   click2 = true
+			   
+		   }
+			   
+          });
+      });
+    </script>
+  </body>
+</html>

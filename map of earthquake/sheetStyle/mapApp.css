@@ -1,0 +1,13 @@
+#viewDiv {
+    width: 950px;
+    height: 920px;
+    border: 1px solid black;
+    float: left;
+}
+
+#container {
+    width: 950px;
+    height: 920px;
+    border: 1px solid black;
+    float: right;
+}
