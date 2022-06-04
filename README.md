@@ -1,5 +1,6 @@
 ### Hi there 👋
-
+## 点击查看演示
+<a href="map of earthquake/">map of earthquake</a>
 <!--
 **suntaoxh/suntaoxh** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
